@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 import sys
-from gui import LutrisCoverDownloaderApp
+from gui import LCAD
 
 
 def main():
-    app = LutrisCoverDownloaderApp()
+    app = LCAD()
     return app.run(sys.argv)
 
 

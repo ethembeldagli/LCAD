@@ -1,0 +1,42 @@
+id: io.github.ethembeldagli.lcad
+runtime: org.gnome.Platform
+runtime-version: '45'
+sdk: org.gnome.Sdk
+command: lcad
+finish-args:
+  - --socket=x11
+  - --socket=wayland
+  - --socket=session-bus
+  - --own-name=io.github.ethembeldagli.lcad
+  - --share=ipc
+  - --share=network
+  - --filesystem=home
+
+modules:
+  - name: lcad
+    buildsystem: simple
+    build-options:
+      build-args:
+        - --share=network
+    build-commands:
+      # 1. Install the requests library into the Flatpak container
+      - pip3 install --prefix=/app requests
+      
+      # 2. Create application directory structure
+      - mkdir -p /app/bin /app/share/lcad
+      
+      # 3. Copy Python source files
+      - cp core.py gui.py main.py /app/share/lcad/
+      
+      # 4. Create launcher script
+      - echo '#!/bin/sh' > /app/bin/lcad
+      - echo 'exec python3 /app/share/lcad/main.py "$@"' >> /app/bin/lcad
+      - chmod +x /app/bin/lcad
+      
+      # 5. Install metadata & desktop files
+      - install -D lcad_nobg.png /app/share/icons/hicolor/512x512/apps/io.github.ethembeldagli.lcad.png
+      - install -D io.github.ethembeldagli.lcad.desktop /app/share/applications/io.github.ethembeldagli.lcad.desktop
+
+    sources:
+      - type: dir
+        path: .

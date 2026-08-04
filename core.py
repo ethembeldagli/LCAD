@@ -1,5 +1,5 @@
 """
-Core logic for Lutris Cover Art Downloader.
+Core logic for LCAD.
 No GTK/UI code here - keeps this testable and reusable.
 """
 import os
@@ -78,7 +78,7 @@ def list_games():
 
 def api_key_path():
     cfg_dir = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
-    d = os.path.join(cfg_dir, "lutris-cover-downloader")
+    d = os.path.join(cfg_dir, "lcad")
     os.makedirs(d, exist_ok=True)
     return os.path.join(d, "apikey.txt")
 

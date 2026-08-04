@@ -1,5 +1,5 @@
 """
-GTK4 / Libadwaita GUI for Lutris Cover Art Downloader.
+GTK4 / Libadwaita GUI for LCAD.
 """
 import threading
 import gi
@@ -271,7 +271,7 @@ class ImagePickerDialog(Adw.Window):
         if cover_type == "vertical":
             self.thumb_w, self.thumb_h = 200, 400  # 600x900 / 3
         else:
-            self.thumb_w, self.thumb_h = 153, 72  # 460x215 / 3 (rounded)
+            self.thumb_w, self.thumb_h = 153, 172# 460x215 / 3 (rounded)
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
@@ -383,7 +383,7 @@ class ImagePickerDialog(Adw.Window):
 
 class MainWindow(Adw.ApplicationWindow):
     def __init__(self, app):
-        super().__init__(application=app, title="Lutris Cover Art Downloader")
+        super().__init__(application=app, title="LCAD")
         self.set_default_size(560, 640)
 
         self.api_key = core.load_api_key()
@@ -615,9 +615,9 @@ class MainWindow(Adw.ApplicationWindow):
             run_async(core.restart_lutris, lambda _r, _e: self.status_label.set_label("Done. Lutris restarted."))
 
 
-class LutrisCoverDownloaderApp(Adw.Application):
+class LCAD(Adw.Application):
     def __init__(self):
-        super().__init__(application_id="io.github.lutriscoverdownloader.App")
+        super().__init__(application_id="io.ethembeldagli.lcad.app")
 
     def do_activate(self):
         win = self.props.active_window

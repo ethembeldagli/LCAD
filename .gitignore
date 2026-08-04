@@ -1,0 +1,16 @@
+# Python / PyInstaller build artifacts
+__pycache__/
+build/
+dist/
+venv/
+*.spec
+
+# Flatpak build artifacts
+.flatpak-builder/
+build-dir/
+repo/
+
+# Compiled packages (upload these to Releases, not git)
+*.deb
+*.rpm
+*.flatpak

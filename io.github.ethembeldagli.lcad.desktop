@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=LCAD
+Comment=Lutris Cover Art Downloader
+Exec=lcad
+Icon=io.github.ethembeldagli.lcad
+Terminal=false
+Type=Application
