@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.lutriscoverdownloader.App</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Lutris Cover Art Downloader</name>
+  <summary>Fetch Steam-style banners and covers for your Lutris library</summary>
+  <description>
+    <p>
+      Scans your Lutris game library, lets you pick which games are missing
+      artwork, searches SteamGridDB for matching banners or vertical covers,
+      and saves them where Lutris expects to find them. Optionally restarts
+      Lutris automatically when finished.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.lutriscoverdownloader.App.desktop</launchable>
+  <categories>
+    <category>Game</category>
+    <category>Utility</category>
+  </categories>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.0" date="2026-08-04">
+      <description>
+        <p>Initial release.</p>
+      </description>
+    </release>
+  </releases>
+  <url type="homepage">https://github.com/YOUR_USERNAME/lutris-cover-downloader</url>
+</component>

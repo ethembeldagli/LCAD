@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Lutris Cover Art Downloader
+Comment=Download Steam-style banners and covers for your Lutris library from SteamGridDB
+Exec=lutris-cover-downloader
+Icon=io.github.lutriscoverdownloader.App
+Terminal=false
+Categories=Game;Utility;
+Keywords=lutris;steamgriddb;covers;banners;artwork;
