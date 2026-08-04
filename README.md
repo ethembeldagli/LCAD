@@ -19,21 +19,24 @@
 
 ## 📦 Installation
 
-Pre-compiled packages for **x86_64** Linux systems are available on the [Releases Page](https://github.com/ethembeldagli/lutris-cover-downloader/releases).
+Download the pre-compiled packages directly from the [Releases Page](https://github.com/ethembeldagli/lutris-cover-downloader/releases).
 
 ### 🔷 Universal (Flatpak)
+
 ```bash
-flatpak install ./lcad.flatpak
+flatpak install --user -y ./lcad-x86-universal.flatpak
 ```
 
 ### 🌀 Debian / Ubuntu / Linux Mint (`.deb`)
+
 ```bash
-sudo apt install ./lcad.deb
+sudo apt install ./lcad-x86-debian-ubuntu-mint.deb
 ```
 
 ### 🔴 Fedora / RHEL / Bazzite (`.rpm`)
+
 ```bash
-sudo dnf install ./lcad.rpm
+sudo dnf install ./lcad-x86-fedora-bazzite.rpm
 ```
 
 ---
@@ -43,19 +46,23 @@ sudo dnf install ./lcad.rpm
 If you wish to run or build LCAD manually from source (e.g., on ARM/`aarch64` devices):
 
 ### 1. Prerequisites
+
 Ensure you have Python 3.10+ and GTK4 installed on your system:
 
 **Debian/Ubuntu:**
+
 ```bash
 sudo apt install -y python3 python3-gi python3-gi-cairo libgtk-4-dev
 ```
 
 **Fedora/Bazzite:**
+
 ```bash
 sudo dnf install -y python3 python3-gobject gtk4
 ```
 
 ### 2. Clone & Run
+
 ```bash
 # Clone the repository
 git clone [https://github.com/ethembeldagli/lutris-cover-downloader.git](https://github.com/ethembeldagli/lutris-cover-downloader.git)
