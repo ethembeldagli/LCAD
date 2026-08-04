@@ -3,7 +3,6 @@
 ![License](https://img.shields.io/github/license/ethembeldagli/lutris-cover-downloader?style=for-the-badge)
 ![GTK Version](https://img.shields.io/badge/GTK-4.0-blue?style=for-the-badge&logo=gtk)
 ![Platform](https://img.shields.io/badge/Platform-Linux-orange?style=for-the-badge&logo=linux)
-![Architecture](https://img.shields.io/badge/Arch-x86__64-brightgreen?style=for-the-badge)
 
 **LCAD** (Lutris Cover Downloader) is a modern, lightweight GTK4 application designed to automatically scan your Lutris library, fetch missing cover art, and organize your game grid effortlessly.
 
