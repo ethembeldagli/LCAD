@@ -19,7 +19,7 @@ def run_async(work_fn, done_fn):
         try:
             result = work_fn()
             GLib.idle_add(done_fn, result, None)
-        except Exception as e:  # noqa: BLE001 - we want to surface any error to the UI
+        except Exception as e:  # noqa: BLE001
             GLib.idle_add(done_fn, None, e)
     threading.Thread(target=worker, daemon=True).start()
 
@@ -44,9 +44,16 @@ class GameRow(Gtk.Box):
         label.set_hexpand(True)
         self.append(label)
 
-        has_cover = game["has_banner"] if cover_type == "banner" else game["has_cover"]
-        status = Gtk.Label(label=("✓ has cover" if has_cover else "missing"))
-        status.add_css_class("dim-label" if has_cover else "warning")
+        if cover_type == "banner":
+            has_media = game["has_banner"]
+        elif cover_type == "icon":
+            has_media = game["has_icon"]
+        else:
+            has_media = game["has_cover"]
+
+        status_text = f"✓ has {cover_type}" if has_media else "missing"
+        status = Gtk.Label(label=status_text)
+        status.add_css_class("dim-label" if has_media else "warning")
         self.append(status)
 
     def is_selected(self):
@@ -116,7 +123,7 @@ class ApiKeyDialog(Adw.Window):
 
 
 # ---------------------------------------------------------------------------
-# Match picker dialog (choose which SteamGridDB game matches, or re-search)
+# Match picker dialog
 # ---------------------------------------------------------------------------
 
 class MatchPickerDialog(Adw.Window):
@@ -158,8 +165,8 @@ class MatchPickerDialog(Adw.Window):
         outer.append(search_row)
 
         btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        skip_btn = Gtk.Button(label="Skip this game")
-        skip_btn.connect("clicked", lambda _b: self._finish(None))
+        skip_btn = Gtk.Button(label="Skip game")
+        skip_btn.connect("clicked", lambda _b: self._finish("skip"))
         btn_row.append(skip_btn)
 
         use_btn = Gtk.Button(label="Use Selected")
@@ -172,9 +179,10 @@ class MatchPickerDialog(Adw.Window):
         toolbar.set_content(outer)
         self.set_content(toolbar)
 
-        self.connect("close-request", lambda _w: self._finish(None) or False)
+        # Pressing 'X' cancels remaining download queue
+        self.connect("close-request", lambda _w: self._finish("cancel") or False)
 
-        self._populate(initial_query, results=None)  # results loaded async below
+        self._populate(initial_query, results=None)
         self._run_search(initial_query)
 
     def _run_search(self, query):
@@ -183,7 +191,6 @@ class MatchPickerDialog(Adw.Window):
                   lambda results, err: self._populate(query, results, err))
 
     def _populate(self, query, results, err=None):
-        # clear existing rows
         child = self.listbox.get_first_child()
         while child is not None:
             nxt = child.get_next_sibling()
@@ -191,7 +198,7 @@ class MatchPickerDialog(Adw.Window):
             child = nxt
 
         if results is None:
-            return  # initial call before search resolves
+            return
 
         if err is not None:
             self.query_label.set_label(f"Search failed: {err}")
@@ -234,12 +241,12 @@ class MatchPickerDialog(Adw.Window):
             return
         self._finish(row.game_id)
 
-    def _finish(self, game_id):
+    def _finish(self, action_or_id):
         if self._decided:
             return
         self._decided = True
         self.destroy()
-        self.on_result(game_id)
+        self.on_result(action_or_id)
 
 
 def bytes_to_texture(data):
@@ -250,28 +257,34 @@ def bytes_to_texture(data):
     return Gdk.Texture.new_for_pixbuf(pixbuf)
 
 
+# ---------------------------------------------------------------------------
+# Image picker dialog
+# ---------------------------------------------------------------------------
+
 class ImagePickerDialog(Adw.Window):
-    """Shows a thumbnail gallery of every available cover image for a game
-    and lets the user pick exactly which one to use."""
+    """Shows a thumbnail gallery of available artwork/icons for a game."""
 
     MAX_IMAGES = 40
 
     def __init__(self, parent, game_display_name, images, cover_type, on_result):
         super().__init__(transient_for=parent, modal=True,
-                          title=f"Choose cover for {game_display_name}")
+                          title=f"Choose {cover_type} for {game_display_name}")
         self.on_result = on_result
         self.images = images[: self.MAX_IMAGES]
         self.cover_type = cover_type
         self.selected_url = None
         self._decided = False
-        self.set_default_size(680, 620)
+        self.set_default_size(820, 680)
 
-        # Thumbnail preview size = exact target resolution scaled down 1/3,
-        # so the aspect ratio matches precisely: 600x900 or 460x215.
         if cover_type == "vertical":
-            self.thumb_w, self.thumb_h = 200, 400  # 600x900 / 3
-        else:
-            self.thumb_w, self.thumb_h = 153, 172# 460x215 / 3 (rounded)
+            self.thumb_w, self.thumb_h = 180, 400
+            max_per_line = 3
+        elif cover_type == "banner":
+            self.thumb_w, self.thumb_h = 220, 200
+            max_per_line = 3
+        else:  # icon
+            self.thumb_w, self.thumb_h = 96, 96
+            max_per_line = 5
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
@@ -293,18 +306,19 @@ class ImagePickerDialog(Adw.Window):
         scroller = Gtk.ScrolledWindow(vexpand=True)
         self.flowbox = Gtk.FlowBox()
         self.flowbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
-        self.flowbox.set_max_children_per_line(3 if cover_type == "vertical" else 4)
-        self.flowbox.set_homogeneous(False)
-        self.flowbox.set_row_spacing(8)
-        self.flowbox.set_column_spacing(8)
+        self.flowbox.set_max_children_per_line(max_per_line)
+        self.flowbox.set_min_children_per_line(1)
+        self.flowbox.set_homogeneous(True)
+        self.flowbox.set_row_spacing(12)
+        self.flowbox.set_column_spacing(12)
         self.flowbox.connect("child-activated", self.on_child_activated)
         self.flowbox.connect("selected-children-changed", self.on_selection_changed)
         scroller.set_child(self.flowbox)
         outer.append(scroller)
 
         btn_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        skip_btn = Gtk.Button(label="Skip this game")
-        skip_btn.connect("clicked", lambda _b: self._finish(None))
+        skip_btn = Gtk.Button(label="Skip game")
+        skip_btn.connect("clicked", lambda _b: self._finish("skip"))
         btn_row.append(skip_btn)
 
         self.use_btn = Gtk.Button(label="Use Selected Image")
@@ -318,34 +332,39 @@ class ImagePickerDialog(Adw.Window):
         toolbar.set_content(outer)
         self.set_content(toolbar)
 
-        self.connect("close-request", lambda _w: self._finish(None) or False)
+        # Pressing 'X' cancels remaining download queue
+        self.connect("close-request", lambda _w: self._finish("cancel") or False)
 
         self._populate()
 
     def _populate(self):
         for image in self.images:
-            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-            box.set_size_request(self.thumb_w, self.thumb_h)
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
             box.set_halign(Gtk.Align.CENTER)
             box.set_valign(Gtk.Align.CENTER)
-            box.set_hexpand(False)
-            box.set_vexpand(False)
+
             picture = Gtk.Picture()
-            picture.set_content_fit(Gtk.ContentFit.COVER)
+            picture.set_can_shrink(True)
+            picture.set_content_fit(Gtk.ContentFit.CONTAIN if self.cover_type == "icon" else Gtk.ContentFit.COVER)
             picture.set_size_request(self.thumb_w, self.thumb_h)
-            picture.set_halign(Gtk.Align.CENTER)
-            picture.set_valign(Gtk.Align.CENTER)
-            picture.set_hexpand(False)
-            picture.set_vexpand(False)
             box.append(picture)
 
             dims_label = Gtk.Label(label=f"{image.get('width')}x{image.get('height')}")
             dims_label.add_css_class("dim-label")
             dims_label.add_css_class("caption")
             box.append(dims_label)
+
             box.image_url = image["url"]
             box.picture = picture
-            self.flowbox.append(box)
+
+            child = Gtk.FlowBoxChild()
+            child.set_child(box)
+            child.set_hexpand(False)
+            child.set_vexpand(False)
+            child.set_halign(Gtk.Align.CENTER)
+            child.set_valign(Gtk.Align.CENTER)
+
+            self.flowbox.append(child)
 
             run_async(lambda img=image: core.download_bytes(img["thumb"]),
                       lambda data, err, pic=picture: self._on_thumb_loaded(pic, data, err))
@@ -366,20 +385,24 @@ class ImagePickerDialog(Adw.Window):
         self.on_use_clicked(None)
 
     def on_use_clicked(self, _btn):
-        child = self.flowbox.get_selected_children()
-        if not child:
+        selected_children = self.flowbox.get_selected_children()
+        if not selected_children:
             return
-        box = child[0].get_child()
+        flow_child = selected_children[0]
+        box = flow_child.get_child()
         self._finish(box.image_url)
 
-    def _finish(self, url):
+    def _finish(self, action_or_url):
         if self._decided:
             return
         self._decided = True
         self.destroy()
-        self.on_result(url)
+        self.on_result(action_or_url)
 
 
+# ---------------------------------------------------------------------------
+# Main Window
+# ---------------------------------------------------------------------------
 
 class MainWindow(Adw.ApplicationWindow):
     def __init__(self, app):
@@ -387,17 +410,18 @@ class MainWindow(Adw.ApplicationWindow):
         self.set_default_size(560, 640)
 
         self.api_key = core.load_api_key()
-        self.cover_type = "vertical"  # or "banner"
+        self.cover_type = "vertical"
         self.games = []
         self.download_queue = []
         self.queue_total = 0
+        self.downloaded_count = 0
 
         toolbar = Adw.ToolbarView()
         header = Adw.HeaderBar()
         toolbar.add_top_bar(header)
 
         self.cover_dropdown = Gtk.DropDown.new_from_strings(
-            ["Vertical (600x900)", "Banner (460x215)"]
+            ["Vertical (600x900)", "Banner (460x215)", "Icon (Square)"]
         )
         self.cover_dropdown.connect("notify::selected", self.on_cover_type_changed)
         header.pack_start(self.cover_dropdown)
@@ -440,7 +464,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.restart_switch_row.append(self.restart_switch)
         bottom_row.append(self.restart_switch_row)
 
-        download_btn = Gtk.Button(label="Download Covers for Selected")
+        download_btn = Gtk.Button(label="Download Media for Selected")
         download_btn.add_css_class("suggested-action")
         download_btn.set_hexpand(True)
         download_btn.connect("clicked", self.on_download_clicked)
@@ -477,13 +501,24 @@ class MainWindow(Adw.ApplicationWindow):
             self.listbox.append(row)
 
     def on_cover_type_changed(self, _dropdown, _pspec):
-        self.cover_type = "vertical" if self.cover_dropdown.get_selected() == 0 else "banner"
+        idx = self.cover_dropdown.get_selected()
+        if idx == 0:
+            self.cover_type = "vertical"
+        elif idx == 1:
+            self.cover_type = "banner"
+        else:
+            self.cover_type = "icon"
         self._rebuild_rows()
 
     def select_missing(self):
         for row in self._rows():
-            has_cover = row.game["has_banner"] if self.cover_type == "banner" else row.game["has_cover"]
-            row.set_selected(not has_cover)
+            if self.cover_type == "banner":
+                has_media = row.game["has_banner"]
+            elif self.cover_type == "icon":
+                has_media = row.game["has_icon"]
+            else:
+                has_media = row.game["has_cover"]
+            row.set_selected(not has_media)
 
     def select_none(self):
         for row in self._rows():
@@ -492,7 +527,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _rows(self):
         row = self.listbox.get_first_child()
         while row is not None:
-            game_row = row.get_child()  # unwrap the auto-added Gtk.ListBoxRow
+            game_row = row.get_child()
             if game_row is not None:
                 yield game_row
             row = row.get_next_sibling()
@@ -520,6 +555,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _start_download(self, selected):
         self.download_queue = list(selected)
         self.queue_total = len(selected)
+        self.downloaded_count = 0
         self.progress.set_visible(True)
         self.progress.set_fraction(0)
         self._process_next()
@@ -541,54 +577,53 @@ class MainWindow(Adw.ApplicationWindow):
                   lambda results, err: self._on_search_done(game, results, err))
 
     def _on_search_done(self, game, results, err):
-        if err is not None:
-            self.status_label.set_label(f"Search failed for {game['name']}: {err}")
-            self._process_next()
-            return
-        if not results:
+        if err is not None or not results:
             self.status_label.set_label(f"No results for {game['name']}, skipping.")
             self._process_next()
             return
 
         MatchPickerDialog(
             self, game["name"], game["name"], self.api_key,
-            on_result=lambda game_id: self._on_match_chosen(game, game_id),
+            on_result=lambda result: self._on_match_chosen(game, result),
         ).present()
 
-    def _on_match_chosen(self, game, game_id):
-        if game_id is None:
+    def _on_match_chosen(self, game, result):
+        if result == "cancel":
+            self._cancel_queue()
+            return
+        elif result == "skip" or result is None:
             self.status_label.set_label(f"Skipped {game['name']}.")
             self._process_next()
             return
 
-        self.status_label.set_label(f"Loading cover images for {game['name']}...")
-        dims = core.get_query_dims(self.cover_type)
+        game_id = result
+        self.status_label.set_label(f"Loading {self.cover_type} images for {game['name']}...")
 
-        run_async(lambda: core.get_grid_images(game_id, dims, self.api_key, self.cover_type),
+        run_async(lambda: core.get_images_for_type(game_id, self.cover_type, self.api_key),
                   lambda images, err: self._on_images_loaded(game, images, err))
 
     def _on_images_loaded(self, game, images, err):
-        if err is not None:
-            self.status_label.set_label(f"Failed to load images for {game['name']}: {err}")
-            self._process_next()
-            return
-        if not images:
-            self.status_label.set_label(f"No cover images available for {game['name']}.")
+        if err is not None or not images:
+            self.status_label.set_label(f"No {self.cover_type} images available for {game['name']}.")
             self._process_next()
             return
 
         ImagePickerDialog(
             self, game["name"], images, self.cover_type,
-            on_result=lambda url: self._on_image_chosen(game, url),
+            on_result=lambda result: self._on_image_chosen(game, result),
         ).present()
 
-    def _on_image_chosen(self, game, url):
-        if url is None:
+    def _on_image_chosen(self, game, result):
+        if result == "cancel":
+            self._cancel_queue()
+            return
+        elif result == "skip" or result is None:
             self.status_label.set_label(f"Skipped {game['name']}.")
             self._process_next()
             return
 
-        self.status_label.set_label(f"Downloading cover for {game['name']}...")
+        url = result
+        self.status_label.set_label(f"Downloading {self.cover_type} for {game['name']}...")
 
         def work():
             data = core.download_bytes(url)
@@ -598,19 +633,26 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _on_download_done(self, game, path, err):
         if err is not None:
-            self.status_label.set_label(f"Failed to download cover for {game['name']}: {err}")
+            self.status_label.set_label(f"Failed to download {self.cover_type} for {game['name']}: {err}")
         elif path is None:
-            self.status_label.set_label(f"No cover image available for {game['name']}.")
+            self.status_label.set_label(f"No image available for {game['name']}.")
         else:
-            self.status_label.set_label(f"Saved cover for {game['name']}.")
+            self.downloaded_count += 1
+            self.status_label.set_label(f"Saved {self.cover_type} for {game['name']}.")
         self._process_next()
+
+    def _cancel_queue(self):
+        self.download_queue.clear()
+        self.progress.set_visible(False)
+        self.status_label.set_label("Cancelled download process.")
+        self.scan_library()
 
     def _finish_download(self):
         self.progress.set_fraction(1)
         self.status_label.set_label("All done!")
         self.scan_library()
 
-        if self.restart_switch.get_active():
+        if self.restart_switch.get_active() and self.downloaded_count > 0:
             self.status_label.set_label("Restarting Lutris...")
             run_async(core.restart_lutris, lambda _r, _e: self.status_label.set_label("Done. Lutris restarted."))
 

@@ -27,13 +27,19 @@ def get_db_path():
 
 
 def get_cover_dir(cover_type):
-    """cover_type: 'banner' or 'vertical'"""
-    base = os.path.expanduser("~/.local/share/lutris")
-    return os.path.join(base, "banners" if cover_type == "banner" else "coverart")
+    """cover_type: 'banner', 'vertical', or 'icon'"""
+    base = os.path.expanduser("~/.local/share")
+    if cover_type == "icon":
+        return os.path.join(base, "icons", "hicolor", "128x128", "apps")
+    return os.path.join(base, "lutris", "banners" if cover_type == "banner" else "coverart")
 
 
 def get_query_dims(cover_type):
-    return BANNER_DIMS_QUERY if cover_type == "banner" else VERTICAL_DIMS_QUERY
+    if cover_type == "banner":
+        return BANNER_DIMS_QUERY
+    elif cover_type == "vertical":
+        return VERTICAL_DIMS_QUERY
+    return ""
 
 
 def list_games():
@@ -56,6 +62,8 @@ def list_games():
 
     banner_dir = get_cover_dir("banner")
     cover_dir = get_cover_dir("vertical")
+    icon_dir = get_cover_dir("icon")
+    lutris_icon_dir = os.path.expanduser("~/.local/share/lutris/icons")
 
     games = []
     seen_slugs = set()
@@ -63,11 +71,20 @@ def list_games():
         if not slug or slug in seen_slugs:
             continue
         seen_slugs.add(slug)
+
+        has_icon = (
+            os.path.isfile(os.path.join(icon_dir, f"lutris_{slug}.png")) or
+            os.path.isfile(os.path.join(icon_dir, f"lutris_{slug}.jpg")) or
+            os.path.isfile(os.path.join(lutris_icon_dir, f"{slug}.png")) or
+            os.path.isfile(os.path.join(lutris_icon_dir, f"{slug}.jpg"))
+        )
+
         games.append({
             "slug": slug,
             "name": name or slug.replace("-", " ").title(),
             "has_banner": os.path.isfile(os.path.join(banner_dir, slug + ".jpg")),
             "has_cover": os.path.isfile(os.path.join(cover_dir, slug + ".jpg")),
+            "has_icon": has_icon,
         })
     return games
 
@@ -140,13 +157,7 @@ ALLOWED_DIMS = {
 
 
 def get_grid_images(game_id, dims_query, api_key, cover_type=None):
-    """Return the full list of available grid images for a game as
-    {id, url, thumb, width, height, style} dicts (not just the first one).
-
-    If cover_type is given, results are filtered client-side to only include
-    images whose actual width/height match that cover type's allowed sizes -
-    the API's own `dimensions` query param filtering isn't always reliable.
-    """
+    """Return available grid images (covers or banners) for a game."""
     headers = {"Authorization": f"Bearer {api_key}"}
     url = f"{STEAMGRIDDB_BASE}/grids/game/{game_id}?dimensions={dims_query}"
     r = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
@@ -175,10 +186,35 @@ def get_grid_images(game_id, dims_query, api_key, cover_type=None):
     return images
 
 
-def get_grid_image_url(game_id, dims_query, api_key):
-    """Return the URL of the first matching grid image, or None."""
-    images = get_grid_images(game_id, dims_query, api_key)
-    return images[0]["url"] if images else None
+def get_icons(game_id, api_key):
+    """Return available icon images for a game from SteamGridDB."""
+    headers = {"Authorization": f"Bearer {api_key}"}
+    url = f"{STEAMGRIDDB_BASE}/icons/game/{game_id}"
+    r = requests.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
+    if r.status_code != 200:
+        return []
+    data = r.json()
+    if not data.get("success") or not data.get("data"):
+        return []
+
+    return [
+        {
+            "id": g["id"],
+            "url": g["url"],
+            "thumb": g.get("thumb", g["url"]),
+            "width": g.get("width", 128),
+            "height": g.get("height", 128),
+            "style": g.get("style", "official"),
+        }
+        for g in data["data"]
+    ]
+
+
+def get_images_for_type(game_id, cover_type, api_key):
+    """Helper to route image fetching based on cover_type."""
+    if cover_type == "icon":
+        return get_icons(game_id, api_key)
+    return get_grid_images(game_id, get_query_dims(cover_type), api_key, cover_type)
 
 
 def download_bytes(url):
@@ -188,17 +224,27 @@ def download_bytes(url):
 
 
 def save_cover_bytes(data, slug, cover_type):
-    """Write already-downloaded image bytes to the right Lutris cover dir."""
+    """Write downloaded image bytes to the correct Lutris directory."""
     dest_dir = get_cover_dir(cover_type)
     os.makedirs(dest_dir, exist_ok=True)
-    dest_path = os.path.join(dest_dir, slug + ".jpg")
+
+    if cover_type == "icon":
+        dest_path = os.path.join(dest_dir, f"lutris_{slug}.png")
+        # Also mirror to lutris icons dir if present
+        lutris_icons = os.path.expanduser("~/.local/share/lutris/icons")
+        os.makedirs(lutris_icons, exist_ok=True)
+        with open(os.path.join(lutris_icons, f"{slug}.png"), "wb") as f:
+            f.write(data)
+    else:
+        dest_path = os.path.join(dest_dir, f"{slug}.jpg")
+
     with open(dest_path, "wb") as f:
         f.write(data)
     return dest_path
 
 
 def download_and_save(url, slug, cover_type):
-    """Download an image URL and save it as <slug>.jpg in the right Lutris dir."""
+    """Download an image URL and save it in the right Lutris dir."""
     data = download_bytes(url)
     return save_cover_bytes(data, slug, cover_type)
 
@@ -210,8 +256,7 @@ def download_and_save(url, slug, cover_type):
 def restart_lutris():
     """Kill any running Lutris process and relaunch it.
 
-    Works both for a normal desktop session and when this app itself is
-    running sandboxed inside Flatpak (uses flatpak-spawn --host in that case).
+    Works both for a normal desktop session and when running sandboxed inside Flatpak.
     """
     host_prefix = ["flatpak-spawn", "--host"] if os.environ.get("FLATPAK_ID") else []
 
